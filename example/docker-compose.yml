@@ -1,0 +1,24 @@
+version: "3"
+services:
+  node1:
+    build: ../
+    command: ./ngt-cluster -dimension 300 -http-addr :8001 -rpc-addr :9001 -data-dir data1 -id node1
+    ports:
+      - "8001:8001"
+      - "9001:9001"
+  node2:
+    build: ../
+    command: ./ngt-cluster -dimension 300 -http-addr :8002 -rpc-addr :9002 -data-dir data2 -id node2 -join-addrs node1:8001 -rpc-adv-addr node2:9002
+    ports:
+      - "8002:8002"
+      - "9002:9002"
+    depends_on:
+      - node1
+  node3:
+    build: ../
+    command: ./ngt-cluster -dimension 300 -http-addr :8003 -rpc-addr :9003 -data-dir data3 -id node3 -join-addrs node1:8001 -rpc-adv-addr node3:9003
+    ports:
+      - "8003:8003"
+      - "9003:9003"
+    depends_on:
+      - node1
