@@ -24,7 +24,7 @@ func main() {
 	rpcAddr := flag.String("rpc-addr", "0.0.0.0:8001", "RPC address")
 	rpcAdvAddr := flag.String("rpc-adv-addr", "", "RPC advertising address")
 	dataDir := flag.String("data-dir", "", "data directory")
-	nodeId := flag.String("id", "", "node id")
+	nodeID := flag.String("id", "", "node id")
 	dimension := flag.Int("dimension", 0, "dimension")
 	flag.Parse()
 
@@ -36,7 +36,7 @@ func main() {
 	}
 
 	config := raft.DefaultConfig()
-	config.LocalID = raft.ServerID(*nodeId)
+	config.LocalID = raft.ServerID(*nodeID)
 	config.SnapshotInterval = 20 * time.Second
 	config.SnapshotThreshold = 2
 
@@ -71,7 +71,7 @@ func main() {
 
 	if *joinAddr != "" && *joinAddr != *httpAddr {
 		for i := 0; i < 3; i++ {
-			if err := join(*joinAddr, *rpcAdvAddr, *httpAdvAddr, *nodeId); err != nil {
+			if err := join(*joinAddr, *rpcAdvAddr, *httpAdvAddr, *nodeID); err != nil {
 				log.Printf("failed to join: %+v", err)
 				time.Sleep(time.Duration(1+i) * time.Second)
 				continue
@@ -89,12 +89,12 @@ func main() {
 		}
 		ra.BootstrapCluster(configuration)
 	}
-	handler := &HttpHandler{Raft: ra, State: fsm}
+	handler := &HTTPHandler{Raft: ra, State: fsm}
 	http.ListenAndServe(*httpAddr, handler)
 }
 
 func join(joinAddr, raftAddr, httpAddr, nodeID string) error {
-	b, err := json.Marshal(MemberJoinRequest{RpcAddr: raftAddr, HttpAddr: httpAddr, Id: nodeID})
+	b, err := json.Marshal(MemberJoinRequest{RPCAddr: raftAddr, HTTPAddr: httpAddr, ID: nodeID})
 	if err != nil {
 		return err
 	}

@@ -15,7 +15,7 @@ type InsertRequest struct {
 }
 
 type InsertResponse struct {
-	Id int `json:"id"`
+	ID int `json:"id"`
 }
 
 type SearchRequest struct {
@@ -25,23 +25,23 @@ type SearchRequest struct {
 }
 
 type RemoveRequest struct {
-	Id int `json:"id"`
+	ID int `json:"id"`
 }
 
 type MemberJoinRequest struct {
-	RpcAddr  string `json:"rpc_addr"`
-	HttpAddr string `json:"http_addr"`
-	Id       string `json:"id"`
+	RPCAddr  string `json:"rpc_addr"`
+	HTTPAddr string `json:"http_addr"`
+	ID       string `json:"id"`
 }
 
-var NotLeaderError = errors.New("not leader")
+var ErrNotLeader = errors.New("not leader")
 
-type HttpHandler struct {
+type HTTPHandler struct {
 	Raft  *raft.Raft
 	State *NGTState
 }
 
-func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/members" {
 		h.handleJoin(w, r)
 	} else if r.URL.Path == "/insert" {
@@ -53,14 +53,14 @@ func (h *HttpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *HttpHandler) writeError(w http.ResponseWriter, status int, err error) {
+func (h *HTTPHandler) writeError(w http.ResponseWriter, status int, err error) {
 	w.WriteHeader(status)
 	w.Write([]byte(err.Error()))
 }
 
-func (h *HttpHandler) handleJoin(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) handleJoin(w http.ResponseWriter, r *http.Request) {
 	if h.Raft.State() != raft.Leader {
-		h.writeError(w, http.StatusInternalServerError, NotLeaderError)
+		h.writeError(w, http.StatusInternalServerError, ErrNotLeader)
 		return
 	}
 	m := &MemberJoinRequest{}
@@ -74,10 +74,10 @@ func (h *HttpHandler) handleJoin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, server := range conf.Configuration().Servers {
-		if server.ID == raft.ServerID(m.Id) && server.Address == raft.ServerAddress(m.RpcAddr) {
+		if server.ID == raft.ServerID(m.ID) && server.Address == raft.ServerAddress(m.RPCAddr) {
 			w.WriteHeader(http.StatusOK)
 			return
-		} else if server.ID == raft.ServerID(m.Id) || server.Address == raft.ServerAddress(m.RpcAddr) {
+		} else if server.ID == raft.ServerID(m.ID) || server.Address == raft.ServerAddress(m.RPCAddr) {
 			future := h.Raft.RemoveServer(server.ID, 0, 0)
 			if err := future.Error(); err != nil {
 				h.writeError(w, http.StatusInternalServerError, err)
@@ -85,16 +85,16 @@ func (h *HttpHandler) handleJoin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	fut := h.Raft.AddVoter(raft.ServerID(m.Id), raft.ServerAddress(m.RpcAddr), 0, 0)
+	fut := h.Raft.AddVoter(raft.ServerID(m.ID), raft.ServerAddress(m.RPCAddr), 0, 0)
 	if err := fut.Error(); err != nil {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 }
 
-func (h *HttpHandler) handleInsert(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) handleInsert(w http.ResponseWriter, r *http.Request) {
 	if h.Raft.State() != raft.Leader {
-		h.writeError(w, http.StatusInternalServerError, NotLeaderError)
+		h.writeError(w, http.StatusInternalServerError, ErrNotLeader)
 		return
 	}
 	payload, err := ioutil.ReadAll(r.Body)
@@ -102,7 +102,7 @@ func (h *HttpHandler) handleInsert(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	serialized, err := json.Marshal(RpcMessage{Op: "insert", Payload: payload})
+	serialized, err := json.Marshal(RPCMessage{Op: "insert", Payload: payload})
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return
@@ -112,10 +112,10 @@ func (h *HttpHandler) handleInsert(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	json.NewEncoder(w).Encode(InsertResponse{Id: fut.Response().(int)})
+	json.NewEncoder(w).Encode(InsertResponse{ID: fut.Response().(int)})
 }
 
-func (h *HttpHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	sr := SearchRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&sr); err != nil {
 		h.writeError(w, http.StatusBadRequest, err)
@@ -129,9 +129,9 @@ func (h *HttpHandler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-func (h *HttpHandler) handleRemove(w http.ResponseWriter, r *http.Request) {
+func (h *HTTPHandler) handleRemove(w http.ResponseWriter, r *http.Request) {
 	if h.Raft.State() != raft.Leader {
-		h.writeError(w, http.StatusInternalServerError, NotLeaderError)
+		h.writeError(w, http.StatusInternalServerError, ErrNotLeader)
 		return
 	}
 	payload, err := ioutil.ReadAll(r.Body)
@@ -139,7 +139,7 @@ func (h *HttpHandler) handleRemove(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	serialized, err := json.Marshal(RpcMessage{Op: "remove", Payload: payload})
+	serialized, err := json.Marshal(RPCMessage{Op: "remove", Payload: payload})
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err)
 		return

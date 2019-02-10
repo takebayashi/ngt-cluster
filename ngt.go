@@ -15,7 +15,7 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-type RpcMessage struct {
+type RPCMessage struct {
 	Op      string `json:"op"`
 	Payload []byte `json:"payload"`
 }
@@ -57,8 +57,8 @@ func (s *NGTState) remove(i int) error {
 
 // raft.FSM
 
-func (m *NGTState) Apply(l *raft.Log) interface{} {
-	rm := RpcMessage{}
+func (s *NGTState) Apply(l *raft.Log) interface{} {
+	rm := RPCMessage{}
 	if err := json.Unmarshal(l.Data, &rm); err != nil {
 		panic(err)
 	}
@@ -67,7 +67,7 @@ func (m *NGTState) Apply(l *raft.Log) interface{} {
 		if err := json.Unmarshal(rm.Payload, &im); err != nil {
 			panic(err)
 		}
-		if idx, err := m.insert(im.Vector); err != nil {
+		if idx, err := s.insert(im.Vector); err != nil {
 			panic(err)
 		} else {
 			return idx
@@ -77,7 +77,7 @@ func (m *NGTState) Apply(l *raft.Log) interface{} {
 		if err := json.Unmarshal(rm.Payload, &req); err != nil {
 			panic(err)
 		}
-		if err := m.remove(req.Id); err != nil {
+		if err := s.remove(req.ID); err != nil {
 			panic(err)
 		}
 		return nil
@@ -86,19 +86,19 @@ func (m *NGTState) Apply(l *raft.Log) interface{} {
 	}
 }
 
-func (m *NGTState) Snapshot() (raft.FSMSnapshot, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.ngt.SaveIndex(); err != nil {
+func (s *NGTState) Snapshot() (raft.FSMSnapshot, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.ngt.SaveIndex(); err != nil {
 		panic(err)
 	}
-	return &NGTStateSnapshot{m.dir}, nil
+	return &NGTStateSnapshot{s.dir}, nil
 }
 
-func (m *NGTState) Restore(r io.ReadCloser) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.emptyIndexDir()
+func (s *NGTState) Restore(r io.ReadCloser) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.emptyIndexDir()
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
@@ -108,7 +108,7 @@ func (m *NGTState) Restore(r io.ReadCloser) error {
 		if err != nil {
 			return err
 		}
-		outname := filepath.Join(m.dir, hdr.Name)
+		outname := filepath.Join(s.dir, hdr.Name)
 		outf, err := os.OpenFile(outname, os.O_WRONLY|os.O_CREATE, 0644)
 		if err != nil {
 			return err
@@ -118,7 +118,7 @@ func (m *NGTState) Restore(r io.ReadCloser) error {
 			return err
 		}
 	}
-	return m.loadIndex(true)
+	return s.loadIndex(true)
 }
 
 func (s *NGTState) ensureIndexClosed() {
@@ -128,22 +128,22 @@ func (s *NGTState) ensureIndexClosed() {
 	}
 }
 
-func (m *NGTState) emptyIndexDir() error {
-	m.ensureIndexClosed()
-	if err := os.RemoveAll(m.dir); err != nil {
+func (s *NGTState) emptyIndexDir() error {
+	s.ensureIndexClosed()
+	if err := os.RemoveAll(s.dir); err != nil {
 		return nil
 	}
-	return os.MkdirAll(m.dir, os.ModePerm)
+	return os.MkdirAll(s.dir, os.ModePerm)
 }
 
-func (m *NGTState) loadIndex(save bool) error {
-	m.ensureIndexClosed()
-	m.ngt = gongt.New(m.dir).SetDimension(m.dimension).Open()
-	if errs := m.ngt.GetErrors(); len(errs) > 0 {
+func (s *NGTState) loadIndex(save bool) error {
+	s.ensureIndexClosed()
+	s.ngt = gongt.New(s.dir).SetDimension(s.dimension).Open()
+	if errs := s.ngt.GetErrors(); len(errs) > 0 {
 		return errs[0]
 	}
 	if save {
-		return m.ngt.CreateAndSaveIndex(1)
+		return s.ngt.CreateAndSaveIndex(1)
 	}
 	return nil
 }
