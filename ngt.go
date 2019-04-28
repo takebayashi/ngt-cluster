@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -90,9 +91,29 @@ func (s *NGTState) Snapshot() (raft.FSMSnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.ngt.SaveIndex(); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return &NGTStateSnapshot{s.dir}, nil
+	files, err := ioutil.ReadDir(s.dir)
+	if err != nil {
+		return nil, err
+	}
+	archived := &bytes.Buffer{}
+	tw := tar.NewWriter(archived)
+	for _, f := range files {
+		hdr := &tar.Header{
+			Name: f.Name(),
+			Mode: 0644,
+			Size: f.Size(),
+		}
+		tw.WriteHeader(hdr)
+		fr, err := os.Open(filepath.Join(s.dir, f.Name()))
+		if err != nil {
+			return nil, err
+		}
+		defer fr.Close()
+		io.Copy(tw, fr)
+	}
+	return &NGTStateSnapshot{archived.Bytes()}, nil
 }
 
 func (s *NGTState) Restore(r io.ReadCloser) error {
@@ -149,32 +170,15 @@ func (s *NGTState) loadIndex(save bool) error {
 }
 
 type NGTStateSnapshot struct {
-	dir string
+	tar []byte
 }
 
 // raft.FSMSnapshot
 
 func (s *NGTStateSnapshot) Persist(sink raft.SnapshotSink) error {
-	files, err := ioutil.ReadDir(s.dir)
-	if err != nil {
-		panic(err)
-	}
-	tw := tar.NewWriter(sink)
-	for _, f := range files {
-		hdr := &tar.Header{
-			Name: f.Name(),
-			Mode: 0644,
-			Size: f.Size(),
-		}
-		tw.WriteHeader(hdr)
-		fr, err := os.Open(filepath.Join(s.dir, f.Name()))
-		if err != nil {
-			return err
-		}
-		defer fr.Close()
-		io.Copy(tw, fr)
-	}
-	return tw.Close()
+	defer sink.Close()
+	_, err := io.Copy(sink, bytes.NewBuffer(s.tar))
+	return err
 }
 
 func (*NGTStateSnapshot) Release() {
